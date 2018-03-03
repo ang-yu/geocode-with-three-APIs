@@ -1,0 +1,84 @@
+## geocoding with Google's API, ArcGIS REST API (portal provided for Stanford Affiliates), and Census Bureau's API
+## Author: Ang Yu
+
+#load the required packages
+library(rgeos)
+library(sp)
+library(rgdal)
+library(maps)
+library(ggmap)
+library(httr)
+library(jsonlite)
+
+
+
+# the address should not contain NA or NULL
+
+data <- read.csv("detp.m.csv")
+
+tobegeocoded <- data
+
+tobegeocoded$lon <- NA
+tobegeocoded$lat <- NA
+tobegeocoded$tool <- NA
+tobegeocoded$address <- as.character(tobegeocoded$address)
+
+# set up the Stanford Locator
+
+# get a token here: http://locator.stanford.edu/arcgis/tokens/
+
+myToken <- "7K188aPgiGioaEzSEr6IvQRbGlwuLyGxqfCgAGfmBzhI_dZyInq0lYEhX4iMtn36"
+source("https://raw.githubusercontent.com/cengel/ArcGIS_geocoding/master/SUL_gcFunctions.R")
+stanford.geocoded <- data.frame(matrix(nrow=1,ncol=8))
+
+# set up the census API
+# benchmark = 9 means using census 2010 
+
+get_CensusAdd <- function(address,benchmark=9){
+  base <- "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?"
+  soup <- GET(url=base,query=list(address=address,format='json',benchmark=benchmark))
+  text <- httr::content(soup, "text", encoding="UTF-8")
+  dat <- jsonlite::fromJSON(text)
+  D_dat <- dat$result$addressMatches
+  if (length(D_dat) > 1){
+    return(D_dat['coordinates'][[1]]) #error will just return null, x[1] is lon, x[2] is lat
+  }
+  else {return(c('',NA,NA))}
+}
+
+
+for(i in 1:nrow(tobegeocoded)){
+  tryCatch ( {
+    print(i)
+    test <- NA
+    attempt <- 1
+    while( is.na(test) && attempt <= 4 ) {
+      attempt <- attempt + 1
+      result <- geocode(tobegeocoded$address[i], output = "latlona", source = "google", override_limit = T)
+      try(test <- result[3])
+    } 
+    tobegeocoded$lon[i] <- as.numeric(result[1])
+    tobegeocoded$lat[i] <- as.numeric(result[2])
+    if (is.na(result[3])) {
+      stanford.geocoded <- geocodeSL(tobegeocoded$address[i], myToken, postal = F)
+      if (stanford.geocoded=="M") {
+        tobegeocoded$lon <- stanford.geocoded$lon
+        tobegeocoded$lat <- stanford.geocoded$lat
+        tobegeocoded$tool <- "Stanford"
+      }
+      else {
+        tobegeocoded$lon <- get_CensusAdd(tobegeocoded$address[i])[1]
+        tobegeocoded$lat <- get_CensusAdd(tobegeocoded$address[i])[2]
+        if (is.na(tobegeocoded$lon)) {
+          tobegeocoded$tool <- "None"
+        }
+        else {tobegeocoded$tool <- "Census"}
+      }
+    }
+    else {tobegeocoded$tool <- "Google"}
+  }, 
+  error=function(e){}
+  )
+  if (i%%500==0) {write.csv(tobegeocoded, "geocoding.csv")}
+}
+
