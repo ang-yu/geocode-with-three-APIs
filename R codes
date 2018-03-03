@@ -1,6 +1,7 @@
 ## geocoding with Google's API, ArcGIS REST API (portal provided for Stanford Affiliates), and Census Bureau's API
 ## Author: Ang Yu
 
+
 #load the required packages
 library(rgeos)
 library(sp)
@@ -22,12 +23,13 @@ tobegeocoded$lon <- NA
 tobegeocoded$lat <- NA
 tobegeocoded$tool <- NA
 tobegeocoded$address <- as.character(tobegeocoded$address)
+tobegeocoded$tool <- as.character(tobegeocoded$tool)
 
 # set up the Stanford Locator
 
 # get a token here: http://locator.stanford.edu/arcgis/tokens/
 
-myToken <- "7K188aPgiGioaEzSEr6IvQRbGlwuLyGxqfCgAGfmBzhI_dZyInq0lYEhX4iMtn36"
+myToken <- "bpmzlSrOJdMwWTuF9PVjl3PIJqiTgaeKYBqiQnXlb1qJOig6gSB0aJxo_gPOn4ux"
 source("https://raw.githubusercontent.com/cengel/ArcGIS_geocoding/master/SUL_gcFunctions.R")
 stanford.geocoded <- data.frame(matrix(nrow=1,ncol=8))
 
@@ -43,7 +45,7 @@ get_CensusAdd <- function(address,benchmark=9){
   if (length(D_dat) > 1){
     return(D_dat['coordinates'][[1]]) #error will just return null, x[1] is lon, x[2] is lat
   }
-  else {return(c('',NA,NA))}
+  else {return(c(NA,NA))}
 }
 
 
@@ -55,30 +57,37 @@ for(i in 1:nrow(tobegeocoded)){
     while( is.na(test) && attempt <= 4 ) {
       attempt <- attempt + 1
       result <- geocode(tobegeocoded$address[i], output = "latlona", source = "google", override_limit = T)
-      try(test <- result[3])
+      test <- result[1]
     } 
     tobegeocoded$lon[i] <- as.numeric(result[1])
     tobegeocoded$lat[i] <- as.numeric(result[2])
-    if (is.na(result[3])) {
+    if (is.na(result[1])) {
       stanford.geocoded <- geocodeSL(tobegeocoded$address[i], myToken, postal = F)
-      if (stanford.geocoded=="M") {
+      if (stanford.geocoded$status=="M") {
         tobegeocoded$lon <- stanford.geocoded$lon
         tobegeocoded$lat <- stanford.geocoded$lat
-        tobegeocoded$tool <- "Stanford"
+        tobegeocoded$tool[i] <- "Stanford"
       }
       else {
-        tobegeocoded$lon <- get_CensusAdd(tobegeocoded$address[i])[1]
-        tobegeocoded$lat <- get_CensusAdd(tobegeocoded$address[i])[2]
-        if (is.na(tobegeocoded$lon)) {
-          tobegeocoded$tool <- "None"
+        tobegeocoded$lon[i] <- get_CensusAdd(tobegeocoded$address[i])[1]
+        tobegeocoded$lat[i] <- get_CensusAdd(tobegeocoded$address[i])[2]
+        if (tobegeocoded$lon[i]=="") {
+          tobegeocoded$tool[i] <- "None"
         }
-        else {tobegeocoded$tool <- "Census"}
+        else {tobegeocoded$tool[i] <- "Census"}
       }
     }
-    else {tobegeocoded$tool <- "Google"}
+    else {tobegeocoded$tool[i] <- "Google"}
   }, 
   error=function(e){}
   )
-  if (i%%500==0) {write.csv(tobegeocoded, "geocoding.csv")}
+  if (i%%500==0) {write.csv(tobegeocoded, "geocoding.csv", row.names = F)}
 }
 
+
+table(tobegeocoded$tool)
+
+sum(is.na(tobegeocoded$lat))
+
+
+write.csv(tobegeocoded, "geocoded.csv", row.names = F)
