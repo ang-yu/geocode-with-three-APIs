@@ -1,0 +1,110 @@
+## Geocoding with Google's API, ArcGIS REST API (portal provided for Stanford Affiliates), and Census Bureau's API
+## First try Google's. If it does not return the coordinates, then try Stanford locator. At last, try Census Bureau's API.
+## Author: Ang Yu
+
+
+#load the required packages
+library(rgeos)
+library(sp)
+library(rgdal)
+library(maps)
+library(ggmap)
+library(httr)
+library(jsonlite)
+
+
+# The addresses should be within one column of a data frame, include as much information as possible (street address, city, state, zip).
+# Ideally, the addresses should be in such format: "737 Campus Drive, Stanford, CA 94305"
+# The addresses should not contain NA or NULL
+
+# Note that Google's API has a daily limit of 2500 queries, but in practice, around 4000 queries can be processed without disruption.
+# Note that Stanford's locator requires a token which, in turn, requires a valid Stanford id.
+
+
+data <- read.csv("yourdata")
+
+tobegeocoded <- data
+tobegeocoded$address <- tobegeocoded$`your address variable`
+
+tobegeocoded$lon <- NA
+tobegeocoded$lat <- NA
+tobegeocoded$tool <- NA
+tobegeocoded$address <- as.character(tobegeocoded$address)
+tobegeocoded$tool <- as.character(tobegeocoded$tool)
+tobegeocoded$geoid <- seq.int(nrow(tobegeocoded))
+
+
+# set up the Stanford Locator
+# get a token here: http://locator.stanford.edu/arcgis/tokens/ (the user name is WIN\your SunetID)
+
+myToken <- "yourtoken"
+source("https://raw.githubusercontent.com/cengel/ArcGIS_geocoding/master/SUL_gcFunctions.R")
+stanford.geocoded <- data.frame(matrix(nrow=1,ncol=8))
+
+
+# set up the census API
+# benchmark = 9 means using census 2010 
+
+get_CensusAdd <- function(address,benchmark=9){
+  base <- "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?"
+  soup <- GET(url=base,query=list(address=address,format='json',benchmark=benchmark))
+  text <- httr::content(soup, "text", encoding="UTF-8")
+  dat <- jsonlite::fromJSON(text)
+  D_dat <- dat$result$addressMatches
+  if (length(D_dat) > 1){
+    return(D_dat['coordinates'][[1]])
+  }
+  else {return(c(NA,NA))}
+}
+
+
+# The major loop
+# After every 500 cases, a csv file "geocoding.csv" is output.
+# Only lon, lat, and the tool information (which API contributes to the output) will be added to the 'tobegeocoded' data frame. 
+# Because of both the effectiveness and instability of Google's API, the next tool will be used only after 5 unsuccessful queries with Google's API in succession.
+
+
+for(i in 1:nrow(tobegeocoded)){
+  tryCatch ( {
+    print(i)
+    test <- NA
+    attempt <- 1
+    while( is.na(test) && attempt <= 5 ) {
+      attempt <- attempt + 1
+      result <- geocode(tobegeocoded$address[i], output = "latlona", source = "google", override_limit = T)
+      test <- result[1]
+    } 
+    tobegeocoded$lon[i] <- as.numeric(result[1])
+    tobegeocoded$lat[i] <- as.numeric(result[2])
+    if (is.na(result[1])) {
+      stanford.geocoded <- geocodeSL(tobegeocoded$address[i], myToken, postal = F)
+      if (stanford.geocoded$status=="M") {
+        tobegeocoded$lon[i] <- stanford.geocoded$lon
+        tobegeocoded$lat[i] <- stanford.geocoded$lat
+        tobegeocoded$tool[i] <- "Stanford"
+      }
+      else {
+        tobegeocoded$lon[i] <- as.numeric(get_CensusAdd(tobegeocoded$address[i])[1])
+        tobegeocoded$lat[i] <- as.numeric(get_CensusAdd(tobegeocoded$address[i])[2])
+        if (is.na(tobegeocoded$lon[i])) {
+          tobegeocoded$tool[i] <- "None"
+        }
+        else {tobegeocoded$tool[i] <- "Census"}
+      }
+    }
+    else {tobegeocoded$tool[i] <- "Google"}
+  }, 
+  error=function(e){}
+  )
+  if (i%%500==0) {
+    write.csv(tobegeocoded, "geocoding.csv", row.names = F)
+    }
+}
+
+
+# See the contribution of each API. If no API returns coordinates, tool = "NONE"
+table(tobegeocoded$tool)
+sum(is.na(tobegeocoded$lat))
+
+
+write.csv(tobegeocoded, "geocoded.csv", row.names = F)
