@@ -12,6 +12,8 @@ library(ggmap)
 library(httr)
 library(jsonlite)
 
+options(digits = 9)
+
 
 # The addresses should be within one column of a data frame, include as much information as possible (street address, city, state, zip).
 # Ideally, the addresses should be in such format: "737 Campus Drive, Stanford, CA 94305"
@@ -19,6 +21,7 @@ library(jsonlite)
 
 # Note that Google's API has a daily limit of 2500 queries, but in practice, around 4000 queries can be processed without disruption.
 # Note that Stanford's locator requires a token which, in turn, requires a valid Stanford id.
+# I have some concerns over the results provided by the census API. The precision of them is questionable, and the coordinates seem to have an one-hundred-metre deviation from the actual locations.
 
 
 data <- read.csv("yourdata")
