@@ -3,6 +3,7 @@
 ## Author: Ang Yu
 ## V1 Date: March 5, 2018
 ## V2 Date: March 28, 2018
+## V3 Date: April 1, 2018
 
 
 #load the required packages
@@ -72,14 +73,17 @@ for(i in 1:nrow(tobegeocoded)){
     print(i)
     test <- NA
     attempt <- 1
-    while( is.na(test) && attempt <= 5 ) {
+    while( is.na(test) && attempt <= 4 ) {
       attempt <- attempt + 1
       if (as.numeric(substring(geocodeQueryCheck(),1,2)) > 0) {
-        result <- geocode(tobegeocoded$address[i], output = "latlona", source = "google", override_limit = T)
+        result <- geocode(tobegeocoded$address[i], output = "more", source = "google", override_limit = T)
         test <- result[1]
       }
       else {result <- NA}
     } 
+    if (result[3]!="street_address") {
+      result <- NA
+    }
     tobegeocoded$lon[i] <- as.numeric(result[1])
     tobegeocoded$lat[i] <- as.numeric(result[2])
     if (is.na(result[1])) {
@@ -104,9 +108,8 @@ for(i in 1:nrow(tobegeocoded)){
   )
   if (i%%500==0) {
     write.csv(tobegeocoded, "geocoding.csv", row.names = F)
-    }
+  }
 }
-
 
 # See the contribution of each API. If no API returns coordinates, tool = "NONE"
 table(tobegeocoded$tool, useNA = "always")
