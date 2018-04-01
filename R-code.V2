@@ -34,6 +34,7 @@ tobegeocoded$lon <- NA
 tobegeocoded$lat <- NA
 tobegeocoded$tool <- NA
 tobegeocoded$address <- as.character(tobegeocoded$address)
+tobegeocoded$address <- gsub("[\r\n]", " ", tobegeocoded$address)  # remove carriage returns and new lines
 tobegeocoded$tool <- as.character(tobegeocoded$tool)
 tobegeocoded$geoid <- seq.int(nrow(tobegeocoded))
 
@@ -73,7 +74,10 @@ for(i in 1:nrow(tobegeocoded)){
     print(i)
     test <- NA
     attempt <- 1
-    while( is.na(test) && attempt <= 4 ) {
+    attempt.1 <- 1
+    stanford.geocoded <- as.data.frame("F")
+    colnames(stanford.geocoded) <- "status"
+    while( is.na(test) && attempt <= 3 ) {
       attempt <- attempt + 1
       if (as.numeric(substring(geocodeQueryCheck(),1,2)) > 0) {
         result <- geocode(tobegeocoded$address[i], output = "more", source = "google", override_limit = T)
@@ -81,13 +85,14 @@ for(i in 1:nrow(tobegeocoded)){
       }
       else {result <- NA}
     } 
-    if (result[3]!="street_address") {
-      result <- NA
+    while (is.na(result[1])==F && attempt.1==1) {
+      attempt.1 <- attempt.1 + 1
+      if (result[3]!="street_address") {
+        result[1] <- result[2] <- NA
+      }
     }
-    tobegeocoded$lon[i] <- as.numeric(result[1])
-    tobegeocoded$lat[i] <- as.numeric(result[2])
     if (is.na(result[1])) {
-      stanford.geocoded <- geocodeSL(tobegeocoded$address[i], myToken, postal = F)
+      try(stanford.geocoded <- geocodeSL(tobegeocoded$address[i], myToken, postal = F))
       if (stanford.geocoded$status=="M") {
         tobegeocoded$lon[i] <- stanford.geocoded$lon
         tobegeocoded$lat[i] <- stanford.geocoded$lat
@@ -102,7 +107,10 @@ for(i in 1:nrow(tobegeocoded)){
         else {tobegeocoded$tool[i] <- "Census"}
       }
     }
-    else {tobegeocoded$tool[i] <- "Google"}
+    else {
+      tobegeocoded$lon[i] <- as.numeric(result[1])
+      tobegeocoded$lat[i] <- as.numeric(result[2])
+      tobegeocoded$tool[i] <- "Google"}
   }, 
   error=function(e){}
   )
@@ -110,6 +118,7 @@ for(i in 1:nrow(tobegeocoded)){
     write.csv(tobegeocoded, "geocoding.csv", row.names = F)
   }
 }
+
 
 # See the contribution of each API. If no API returns coordinates, tool = "NONE"
 table(tobegeocoded$tool, useNA = "always")
