@@ -87,7 +87,7 @@ for(i in 1:nrow(tobegeocoded)){
     } 
     while (is.na(result[1])==F && attempt.1==1) {
       attempt.1 <- attempt.1 + 1
-      if (result[3]!="street_address") {
+      if (result[3]!="street_address" & result[3]!="intersection") {
         result[1] <- result[2] <- NA
       }
     }
